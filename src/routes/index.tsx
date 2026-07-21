@@ -112,6 +112,16 @@ function Home() {
             </figcaption>
           </figure>
         </div>
+
+        <div className="mt-16">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold tracking-tight">Try it in your browser</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Upload an mp4, webm, mov, mkv, or wav file — or run the built-in sample — to preview the pipeline and download the result.
+            </p>
+          </div>
+          <VideoProcessor />
+        </div>
       </section>
 
       <section className="border-t border-border bg-muted/30">
