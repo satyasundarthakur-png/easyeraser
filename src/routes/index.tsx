@@ -2,28 +2,26 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { askAssistant } from "@/lib/assistant.functions";
-import veoDemo from "@/assets/veo-demo.gif.asset.json";
-import gwtDemo from "@/assets/gwt-demo.gif.asset.json";
 import { VideoProcessor } from "@/components/VideoProcessor";
 
 export const Route = createFileRoute("/")({
   component: Home,
   head: () => ({
     meta: [
-      { title: "Veo Watermark Remover — Clean removal, pure math" },
+      { title: "Clean Frame — Remove logos, captions & watermarks from video" },
       {
         name: "description",
         content:
-          "Remove the Gemini/Veo diamond and small Veo text watermark from Google Veo videos using mathematically precise reverse alpha blending. Offline, cross-platform, audio preserved.",
+          "Upload a video and remove any logo, caption, subtitle, or watermark. Runs privately in your browser — no upload, no account, audio preserved.",
       },
-      { property: "og:title", content: "Veo Watermark Remover" },
+      { property: "og:title", content: "Clean Frame — Video watermark remover" },
       {
         property: "og:description",
         content:
-          "Offline CLI that removes Google Veo watermarks with reverse alpha blending — no generative fill, no quality loss.",
+          "Drag a box over any logo, caption, or watermark and remove it from your video. Fully in-browser.",
       },
-      { property: "og:image", content: veoDemo.url },
-      { name: "twitter:image", content: veoDemo.url },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });
@@ -57,13 +55,13 @@ function Home() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-md bg-primary" />
-            <span className="text-lg font-semibold tracking-tight">Veo Watermark Remover</span>
+            <span className="text-lg font-semibold tracking-tight">Clean Frame</span>
           </div>
           <a
-            href="https://github.com/allenk/VeoWatermarkRemover/releases/latest"
+            href="#upload"
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
-            Download
+            Start cleaning
           </a>
         </div>
       </header>
@@ -71,73 +69,40 @@ function Home() {
       <section className="mx-auto max-w-5xl px-6 py-16">
         <div className="max-w-3xl">
           <span className="inline-flex items-center rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
-            v0.6.4 · Demo build
+            100% in-browser · private by default
           </span>
           <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-            Remove Veo watermarks with pure math — no hallucinated pixels.
+            Remove logos, captions and watermarks from any video.
           </h1>
           <p className="mt-4 text-lg text-muted-foreground">
-            A cross-platform CLI that erases the Gemini diamond and the small
-            "Veo" wordmark from Google Veo videos using reverse alpha blending.
-            100% offline. Audio preserved. Auto-detects watermark type,
-            resolution, and orientation.
+            Drop a video, drag a rectangle over the mark, and download the cleaned
+            file. Works on logos, subtitles, timecodes, and watermarks — from any
+            source. Your file never leaves your device.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href="https://github.com/allenk/VeoWatermarkRemover/releases/latest"
-              className="rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
-            >
-              Download latest
-            </a>
-            <a
-              href="https://github.com/allenk/VeoWatermarkRemover"
-              className="rounded-md border border-border px-5 py-2.5 text-sm font-medium hover:bg-accent"
-            >
-              View on GitHub
-            </a>
-          </div>
         </div>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-2">
-          <figure className="overflow-hidden rounded-lg border border-border">
-            <img src={veoDemo.url} alt="Drag and drop demo" className="w-full" />
-            <figcaption className="border-t border-border p-3 text-sm text-muted-foreground">
-              Drag & drop workflow
-            </figcaption>
-          </figure>
-          <figure className="overflow-hidden rounded-lg border border-border">
-            <img src={gwtDemo.url} alt="Before / after comparison" className="w-full" />
-            <figcaption className="border-t border-border p-3 text-sm text-muted-foreground">
-              Before / after
-            </figcaption>
-          </figure>
-        </div>
-
-        <div className="mt-16">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold tracking-tight">Try it in your browser</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Upload an mp4, webm, mov, mkv, or wav file — or run the built-in sample — to preview the pipeline and download the result.
-            </p>
-          </div>
+        <div id="upload" className="mt-12">
           <VideoProcessor />
         </div>
       </section>
 
       <section className="border-t border-border bg-muted/30">
         <div className="mx-auto max-w-5xl px-6 py-16">
-          <h2 className="text-2xl font-semibold tracking-tight">Quick start</h2>
-          <div className="mt-6 grid gap-4">
-            <pre className="overflow-x-auto rounded-md border border-border bg-card p-4 text-sm">
-{`# Auto-detects diamond OR small "Veo" text
-./GeminiWatermarkTool-Video video.mp4
-
-# Older large Veo text (pre-Gemini-3.5)
-./GeminiWatermarkTool-Video --legacy old.mp4
-
-# Opt-in ML intensity assist for tricky clips
-./GeminiWatermarkTool-Video --ml video.mp4`}
-            </pre>
+          <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            {[
+              { n: "1", t: "Upload", d: "Drop an mp4, webm, mov, or mkv up to 300MB." },
+              { n: "2", t: "Select", d: "Click-drag a box over the logo, caption, or watermark." },
+              { n: "3", t: "Download", d: "Get a clean mp4 with the region removed and audio preserved." },
+            ].map((s) => (
+              <div key={s.n} className="rounded-xl border border-border bg-card p-5">
+                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                  {s.n}
+                </div>
+                <p className="text-base font-medium">{s.t}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{s.d}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -145,13 +110,13 @@ function Home() {
       <section className="mx-auto max-w-5xl px-6 py-16">
         <h2 className="text-2xl font-semibold tracking-tight">Ask the AI assistant</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Powered by Lovable AI. Ask anything about flags, workflows, or difficult clips.
+          Tips on getting the cleanest result — box sizing, tricky captions, moving marks.
         </p>
         <form onSubmit={onAsk} className="mt-6 flex flex-col gap-3 sm:flex-row">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="How do I fix a clip with a bright background?"
+            placeholder="How do I remove scrolling subtitles?"
             className="flex-1 rounded-md border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
           <button
@@ -176,7 +141,7 @@ function Home() {
 
       <footer className="border-t border-border">
         <div className="mx-auto max-w-5xl px-6 py-8 text-sm text-muted-foreground">
-          Based on GeminiWatermarkTool · MIT License · Demo build
+          Clean Frame · Private, in-browser video cleanup
         </div>
       </footer>
     </div>
