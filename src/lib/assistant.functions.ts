@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
+import { createGroqProvider } from "./groq.server";
 
 const Input = z.object({
   question: z.string().min(1).max(2000),
@@ -21,13 +21,7 @@ Answer clearly and concisely. Give step-by-step tips when useful (e.g. "select a
 export const askAssistant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.GROQ_API_KEY;
-    if (!key) throw new Error("Missing GROQ_API_KEY");
-    const groq = createOpenAICompatible({
-      name: "groq",
-      baseURL: "https://api.groq.com/openai/v1",
-      headers: { Authorization: `Bearer ${key}` },
-    });
+    const groq = createGroqProvider();
     const { text } = await generateText({
       model: groq("openai/gpt-oss-120b"),
       system: SYSTEM,

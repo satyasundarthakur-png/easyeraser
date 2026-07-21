@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
+import { createGroqProvider } from "./groq.server";
 
 const Input = z.object({
   // data URL (data:image/jpeg;base64,...) of a single video frame
@@ -29,14 +29,7 @@ export type DetectResult =
 export const detectRegion = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }): Promise<DetectResult> => {
-    const key = process.env.GROQ_API_KEY;
-    if (!key) throw new Error("Missing GROQ_API_KEY");
-
-    const groq = createOpenAICompatible({
-      name: "groq",
-      baseURL: "https://api.groq.com/openai/v1",
-      headers: { Authorization: `Bearer ${key}` },
-    });
+    const groq = createGroqProvider();
 
     const { text } = await generateText({
       // Current Groq production vision model (image + text input).
