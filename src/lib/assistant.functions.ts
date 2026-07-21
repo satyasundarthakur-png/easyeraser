@@ -29,7 +29,7 @@ export const askAssistant = createServerFn({ method: "POST" })
       headers: { Authorization: `Bearer ${key}` },
     });
     const { text } = await generateText({
-      model: groq("llama-3.3-70b-versatile"),
+      model: groq("openai/gpt-oss-120b"),
       system: SYSTEM,
       prompt: data.question,
     });
