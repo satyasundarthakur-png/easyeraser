@@ -4,7 +4,85 @@ type Status = "idle" | "loading-engine" | "ready" | "selecting" | "processing" |
 
 type Rect = { x: number; y: number; w: number; h: number };
 
+type AppError = {
+  title: string;
+  message: string;
+  stage?: string;
+  detail?: string;
+};
+
 const ACCEPTED = "video/mp4,video/webm,video/quicktime,video/x-matroska";
+
+// Turns a raw thrown error (often a cryptic ffmpeg/WASM/network message) into
+// a clear, actionable explanation for the user, while keeping the raw detail
+// around for anyone who wants to see exactly what happened.
+function explainError(raw: unknown, stage?: string): AppError {
+  const rawMessage =
+    raw instanceof Error ? raw.message : typeof raw === "string" ? raw : JSON.stringify(raw);
+  const detail = raw instanceof Error && raw.stack ? raw.stack : rawMessage;
+  const text = (rawMessage || "").toLowerCase();
+
+  if (text.includes("sharedarraybuffer") || text.includes("cross-origin") || text.includes("coep")) {
+    return {
+      title: "Browser isn't set up for in-browser processing",
+      message:
+        "This tool needs cross-origin isolation (SharedArrayBuffer) to run the video engine. Try a different browser, disable extensions that block it, or reload the page once more.",
+      stage,
+      detail,
+    };
+  }
+  if (text.includes("out of memory") || text.includes("oom") || text.includes("memory access out of bounds")) {
+    return {
+      title: "Ran out of memory",
+      message:
+        "The video is too large or too long for your browser to process in memory. Try a shorter clip, a smaller file, or closing other tabs to free up memory.",
+      stage,
+      detail,
+    };
+  }
+  if (text.includes("failed to fetch") || text.includes("networkerror") || text.includes("load failed")) {
+    return {
+      title: "Couldn't load the processing engine",
+      message:
+        "The video engine files couldn't be downloaded, likely due to a network issue or an ad-blocker. Check your connection and try again.",
+      stage,
+      detail,
+    };
+  }
+  if (text.includes("unsupported") || text.includes("invalid data found") || text.includes("moov atom not found")) {
+    return {
+      title: "Unsupported or corrupted video",
+      message:
+        "The engine couldn't read this file's video/audio format. Try re-exporting the video, or convert it to mp4 first.",
+      stage,
+      detail,
+    };
+  }
+  if (text.includes("assertionerror") || text.includes("abort(") || text.includes("exited with signal")) {
+    return {
+      title: "Processing engine crashed",
+      message:
+        "The in-browser video engine crashed while working on this file. This can happen with unusual codecs or very large frames — try a shorter clip or a different format.",
+      stage,
+      detail,
+    };
+  }
+  if (!rawMessage || text === "processing failed") {
+    return {
+      title: "Processing failed",
+      message:
+        "Something went wrong and no further detail was reported. Try again, or try a shorter/smaller video.",
+      stage,
+      detail,
+    };
+  }
+  return {
+    title: "Processing failed",
+    message: rawMessage,
+    stage,
+    detail,
+  };
+}
 
 export function VideoProcessor() {
   const [file, setFile] = useState<File | null>(null);
@@ -13,7 +91,8 @@ export function VideoProcessor() {
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<AppError | null>(null);
+  const [showErrDetail, setShowErrDetail] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [rect, setRect] = useState<Rect | null>(null);
   const [videoDims, setVideoDims] = useState<{ w: number; h: number } | null>(null);
@@ -35,6 +114,7 @@ export function VideoProcessor() {
     setProgress(0);
     setStage("");
     setErr(null);
+    setShowErrDetail(false);
     setRect(null);
     setVideoDims(null);
   };
@@ -57,11 +137,17 @@ export function VideoProcessor() {
     const okType =
       f.type.startsWith("video/") || /\.(mp4|webm|mov|mkv)$/i.test(f.name);
     if (!okType) {
-      setErr("Unsupported file. Use mp4, webm, mov, or mkv.");
+      setErr({
+        title: "Unsupported file type",
+        message: "This file isn't a recognized video. Use mp4, webm, mov, or mkv.",
+      });
       return;
     }
     if (f.size > 500 * 1024 * 1024) {
-      setErr("File too large (max 500MB).");
+      setErr({
+        title: "File too large",
+        message: `Your file is ${(f.size / (1024 * 1024)).toFixed(0)}MB, which is over the 500MB limit. Try a shorter clip or compress it first.`,
+      });
       return;
     }
     accept(f);
@@ -122,7 +208,10 @@ export function VideoProcessor() {
 
   const process = async () => {
     if (!file || !rect || !videoDims || !overlayRef.current) {
-      setErr("Draw a box over the logo, caption, or watermark first.");
+      setErr({
+        title: "No region selected",
+        message: "Draw a box over the logo, caption, or watermark first.",
+      });
       return;
     }
     const overlayRect = overlayRef.current.getBoundingClientRect();
@@ -140,6 +229,7 @@ export function VideoProcessor() {
     rh = Math.max(4, Math.min(videoDims.h - ry - 1, rh));
 
     setErr(null);
+    setShowErrDetail(false);
     setOutputUrl(null);
     setProgress(0);
     setStage("Preparing engine…");
@@ -187,7 +277,7 @@ export function VideoProcessor() {
       setStage("");
     } catch (e: any) {
       console.error(e);
-      setErr(e?.message ?? "Processing failed");
+      setErr(explainError(e, stage));
       setStatus("error");
     }
   };
@@ -351,9 +441,29 @@ export function VideoProcessor() {
           )}
 
           {err && (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              {err}
-            </p>
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <p className="font-medium">{err.title}</p>
+              <p className="mt-1 text-destructive/90">{err.message}</p>
+              {err.stage && (
+                <p className="mt-1 text-xs text-destructive/70">Happened during: {err.stage}</p>
+              )}
+              {err.detail && (
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowErrDetail((v) => !v)}
+                    className="text-xs font-medium underline underline-offset-2 text-destructive/80 hover:text-destructive"
+                  >
+                    {showErrDetail ? "Hide technical details" : "Show technical details"}
+                  </button>
+                  {showErrDetail && (
+                    <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-destructive/5 p-2 text-xs text-destructive/80">
+                      {err.detail}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           <div className="flex flex-wrap gap-3">
