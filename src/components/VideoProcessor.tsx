@@ -60,8 +60,8 @@ export function VideoProcessor() {
       setErr("Unsupported file. Use mp4, webm, mov, or mkv.");
       return;
     }
-    if (f.size > 300 * 1024 * 1024) {
-      setErr("File too large (max 300MB).");
+    if (f.size > 500 * 1024 * 1024) {
+      setErr("File too large (max 500MB).");
       return;
     }
     accept(f);
@@ -227,7 +227,7 @@ export function VideoProcessor() {
             <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           </div>
           <p className="text-base font-medium">Drop your video here, or click to browse</p>
-          <p className="mt-1 text-sm text-muted-foreground">mp4, webm, mov, mkv · up to 300MB · processed privately in your browser</p>
+          <p className="mt-1 text-sm text-muted-foreground">mp4, webm, mov, mkv · up to 500MB · processed privately in your browser</p>
           <div className="mt-6">
             <button
               type="button"

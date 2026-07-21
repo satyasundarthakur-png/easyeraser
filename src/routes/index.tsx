@@ -91,7 +91,7 @@ function Home() {
           <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             {[
-              { n: "1", t: "Upload", d: "Drop an mp4, webm, mov, or mkv up to 300MB." },
+              { n: "1", t: "Upload", d: "Drop an mp4, webm, mov, or mkv up to 500MB." },
               { n: "2", t: "Select", d: "Click-drag a box over the logo, caption, or watermark." },
               { n: "3", t: "Download", d: "Get a clean mp4 with the region removed and audio preserved." },
             ].map((s) => (
