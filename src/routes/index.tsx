@@ -1,9 +1,10 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { askAssistant } from "@/lib/assistant.functions";
 import veoDemo from "@/assets/veo-demo.gif.asset.json";
 import gwtDemo from "@/assets/gwt-demo.gif.asset.json";
+import { VideoProcessor } from "@/components/VideoProcessor";
 
 export const Route = createFileRoute("/")({
   component: Home,
