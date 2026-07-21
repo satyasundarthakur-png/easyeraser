@@ -41,13 +41,18 @@ function explainError(raw: unknown, stage?: string): AppError {
       detail,
     };
   }
-  if (text.includes("failed to fetch") || text.includes("networkerror") || text.includes("load failed")) {
+  if (
+    text.includes("failed to fetch") ||
+    text.includes("networkerror") ||
+    text.includes("load failed") ||
+    text.includes("failed to import")
+  ) {
     return {
       title: stage === "Auto-detecting overlay…" ? "Couldn't reach the AI detector" : "Couldn't load the processing engine",
       message:
         stage === "Auto-detecting overlay…"
           ? "The AI detection request failed, likely due to a network issue. You can draw the box manually instead."
-          : "The video engine files couldn't be downloaded, likely due to a network issue or an ad-blocker. Check your connection and try again.",
+          : "The video engine (ffmpeg-core.js) couldn't be downloaded from its CDN. This is usually a network hiccup, an ad-blocker/firewall blocking the CDN, or the CDN being briefly unavailable. Check your connection and try again — it retries a backup CDN automatically.",
       stage,
       detail,
     };
@@ -172,13 +177,31 @@ export function VideoProcessor() {
       const pct = Math.max(0, Math.min(100, Math.round(p * 100)));
       setProgress(pct);
     });
-    const base = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-    });
-    ffmpegRef.current = ffmpeg;
-    return ffmpeg;
+
+    // ffmpeg-core.js/.wasm are fetched from a CDN at runtime. A single CDN
+    // being down, rate-limited, or blocked (ad-blocker/corporate firewall)
+    // would otherwise fail the whole app with an opaque "failed to import"
+    // error — so try a couple of CDNs before giving up.
+    const CORE_VERSION = "0.12.10";
+    const CDN_BASES = [
+      `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd`,
+      `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/umd`,
+    ];
+
+    let lastErr: unknown;
+    for (const base of CDN_BASES) {
+      try {
+        const coreURL = await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript");
+        const wasmURL = await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm");
+        await ffmpeg.load({ coreURL, wasmURL });
+        ffmpegRef.current = ffmpeg;
+        return ffmpeg;
+      } catch (e) {
+        lastErr = e;
+        console.warn(`Failed to load ffmpeg-core from ${base}, trying next CDN if available.`, e);
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("Failed to load the video engine from any CDN");
   };
 
   const onVideoLoaded = () => {
