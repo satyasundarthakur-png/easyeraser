@@ -202,14 +202,20 @@ export function VideoProcessor() {
       setProgress(pct);
     });
 
-    // ffmpeg-core.js/.wasm are fetched from a CDN at runtime. A single CDN
-    // being down, rate-limited, or blocked (ad-blocker/corporate firewall)
-    // would otherwise fail the whole app with an opaque "failed to import"
-    // error — so try a couple of CDNs before giving up.
+    // Use the ESM core build, not UMD: @ffmpeg/ffmpeg's internal worker
+    // tries `importScripts(coreURL)` first (classic-worker path), and if
+    // that throws (e.g. because the worker this bundler/host creates is a
+    // *module* worker, where importScripts isn't available) it falls back
+    // to `(await import(coreURL)).default`. The UMD build has no ESM
+    // `export default` (it attaches to `module.exports`/`define` instead),
+    // so that fallback silently gets `undefined` and throws exactly
+    // "failed to import ffmpeg-core.js" — identically regardless of which
+    // CDN served the file. The ESM build has `export default createFFmpegCore`,
+    // which is what that fallback path actually needs.
     const CORE_VERSION = "0.12.10";
     const CDN_BASES = [
-      `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd`,
-      `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/umd`,
+      `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/esm`,
+      `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${CORE_VERSION}/dist/esm`,
     ];
 
     let lastErr: unknown;
