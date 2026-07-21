@@ -70,6 +70,31 @@
   --shadow-glow: 0 20px 60px -20px oklch(0.75 0.19 155 / 0.5);
   --shadow-soft: 0 10px 40px -15px oklch(0 0 0 / 0.6);
   --grid-color: oklch(1 0 0 / 0.04);
+
+  /* Rainbow signature motif: one recurring 6-stop spectrum, reused across
+     the ring, text, and progress utilities below — never as a full-page fill. */
+  --rainbow-1: #ff3b57;
+  --rainbow-2: #ff8a00;
+  --rainbow-3: #ffd400;
+  --rainbow-4: #00e676;
+  --rainbow-5: #00d2ff;
+  --rainbow-6: #6c5ce7;
+  --gradient-rainbow-conic: conic-gradient(
+    from var(--angle),
+    var(--rainbow-1), var(--rainbow-2), var(--rainbow-3), var(--rainbow-4),
+    var(--rainbow-5), var(--rainbow-6), var(--rainbow-1)
+  );
+  --gradient-rainbow-linear: linear-gradient(
+    90deg,
+    var(--rainbow-1), var(--rainbow-2), var(--rainbow-3), var(--rainbow-4),
+    var(--rainbow-5), var(--rainbow-6), var(--rainbow-1)
+  );
+}
+
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
 }
 
 @layer base {
@@ -126,6 +151,13 @@
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+@keyframes spin-angle {
+  to { --angle: 360deg; }
+}
+@keyframes rainbow-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
 
 @utility animate-rise { animation: rise 0.6s ease-out both; }
 @utility animate-float { animation: float 6s ease-in-out infinite; }
@@ -137,4 +169,44 @@
   background-clip: text;
   color: transparent;
   animation: shimmer 2s linear infinite;
+}
+
+/* --- Rainbow signature motif --- */
+
+/* Rotating conic-gradient ring, used on the upload dropzone, the active
+   mode toggle, and anything else that should read as "the" primary
+   surface. Uses the padding-box/border-box trick so it works as a real
+   border rather than a pseudo-element overlay. */
+@utility rainbow-ring {
+  --angle: 0deg;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--ring-fill, var(--color-card)), var(--ring-fill, var(--color-card))) padding-box,
+    var(--gradient-rainbow-conic) border-box;
+  animation: spin-angle 5s linear infinite;
+}
+
+/* Animated rainbow text, reserved for the hero headline's key phrase only. */
+@utility text-rainbow {
+  background: var(--gradient-rainbow-linear);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rainbow-flow 8s linear infinite;
+}
+
+/* Rainbow fill for primary buttons and the processing progress bar. */
+@utility bg-rainbow-flow {
+  background: var(--gradient-rainbow-linear);
+  background-size: 200% 100%;
+  animation: rainbow-flow 4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

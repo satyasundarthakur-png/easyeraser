@@ -371,8 +371,10 @@ export function VideoProcessor() {
             onFiles(e.dataTransfer.files);
           }}
           onClick={() => inputRef.current?.click()}
-          className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 text-center transition ${
-            dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-accent/40"
+          className={`flex cursor-pointer flex-col items-center justify-center rounded-xl p-12 text-center transition ${
+            dragOver
+              ? "rainbow-ring"
+              : "border-2 border-dashed border-border hover:border-primary/50 hover:bg-accent/40"
           }`}
         >
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -387,7 +389,7 @@ export function VideoProcessor() {
                 e.stopPropagation();
                 inputRef.current?.click();
               }}
-              className="rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="bg-rainbow-flow rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03]"
             >
               Choose file
             </button>
@@ -428,7 +430,11 @@ export function VideoProcessor() {
                   type="button"
                   onClick={autoDetect}
                   disabled={detecting || !videoDims || status === "processing" || status === "loading-engine"}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium disabled:opacity-60 ${
+                    detecting
+                      ? "rainbow-ring text-foreground"
+                      : "border border-primary/40 bg-primary/5 text-primary hover:bg-primary/10"
+                  }`}
                 >
                   {detecting ? (
                     "Detecting…"
@@ -513,7 +519,7 @@ export function VideoProcessor() {
             <div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full bg-primary transition-all"
+                  className="bg-rainbow-flow h-full transition-[width]"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -551,7 +557,7 @@ export function VideoProcessor() {
             <button
               onClick={process}
               disabled={status === "processing" || status === "loading-engine" || !rect}
-              className="rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+              className="bg-rainbow-flow rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.02] disabled:animate-none disabled:opacity-60 disabled:hover:scale-100"
             >
               {status === "processing"
                 ? "Processing…"

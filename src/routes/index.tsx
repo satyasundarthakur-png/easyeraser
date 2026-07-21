@@ -53,13 +53,13 @@ function Home() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-primary" />
+          <div className="flex items-center gap-2.5">
+            <div className="rainbow-ring h-8 w-8 rounded-full" />
             <span className="text-lg font-semibold tracking-tight">Clean Frame</span>
           </div>
           <a
             href="#upload"
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            className="bg-rainbow-flow rounded-md px-4 py-2 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.03]"
           >
             Start cleaning
           </a>
@@ -72,7 +72,7 @@ function Home() {
             100% in-browser · private by default
           </span>
           <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-            Remove logos, captions and watermarks from any video.
+            Remove <span className="text-rainbow">logos, captions and watermarks</span> from any video.
           </h1>
           <p className="mt-4 text-lg text-muted-foreground">
             Drop a video, drag a rectangle over the mark, and download the cleaned
@@ -96,7 +96,7 @@ function Home() {
               { n: "3", t: "Download", d: "Get a clean mp4 with the region removed and audio preserved." },
             ].map((s) => (
               <div key={s.n} className="rounded-xl border border-border bg-card p-5">
-                <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                <div className="rainbow-ring mb-2 flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-foreground">
                   {s.n}
                 </div>
                 <p className="text-base font-medium">{s.t}</p>
@@ -122,7 +122,7 @@ function Home() {
           <button
             type="submit"
             disabled={loading}
-            className="rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            className="bg-rainbow-flow rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] transition-transform hover:scale-[1.02] disabled:animate-none disabled:opacity-60"
           >
             {loading ? "Thinking…" : "Ask"}
           </button>
