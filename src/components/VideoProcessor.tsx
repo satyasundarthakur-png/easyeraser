@@ -17,9 +17,30 @@ const ACCEPTED = "video/mp4,video/webm,video/quicktime,video/x-matroska";
 // Turns a raw thrown error (often a cryptic ffmpeg/WASM/network message) into
 // a clear, actionable explanation for the user, while keeping the raw detail
 // around for anyone who wants to see exactly what happened.
+function messageOf(raw: unknown): string {
+  if (raw instanceof Error) return raw.message;
+  if (typeof raw === "string") return raw;
+  // DOMException (thrown by many Worker/importScripts failures) does NOT
+  // extend Error, but does have .name/.message — check for those before
+  // falling back to JSON.stringify, which returns "{}" for DOMException
+  // since its properties aren't own-enumerable.
+  if (raw && typeof raw === "object") {
+    const anyRaw = raw as any;
+    if (typeof anyRaw.message === "string" && anyRaw.message) {
+      return anyRaw.name ? `${anyRaw.name}: ${anyRaw.message}` : anyRaw.message;
+    }
+    try {
+      const json = JSON.stringify(raw);
+      if (json && json !== "{}") return json;
+    } catch {
+      /* fall through */
+    }
+  }
+  return String(raw);
+}
+
 function explainError(raw: unknown, stage?: string): AppError {
-  const rawMessage =
-    raw instanceof Error ? raw.message : typeof raw === "string" ? raw : JSON.stringify(raw);
+  const rawMessage = messageOf(raw);
   const detail = raw instanceof Error && raw.stack ? raw.stack : rawMessage;
   const text = (rawMessage || "").toLowerCase();
 
@@ -45,7 +66,10 @@ function explainError(raw: unknown, stage?: string): AppError {
     text.includes("failed to fetch") ||
     text.includes("networkerror") ||
     text.includes("load failed") ||
-    text.includes("failed to import")
+    text.includes("failed to import") ||
+    text.includes("importscripts") ||
+    text.includes("failed to execute") ||
+    text.includes("failed to load the video engine")
   ) {
     return {
       title: stage === "Auto-detecting overlay…" ? "Couldn't reach the AI detector" : "Couldn't load the processing engine",
@@ -189,6 +213,7 @@ export function VideoProcessor() {
     ];
 
     let lastErr: unknown;
+    const attempts: string[] = [];
     for (const base of CDN_BASES) {
       try {
         const coreURL = await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript");
@@ -198,10 +223,16 @@ export function VideoProcessor() {
         return ffmpeg;
       } catch (e) {
         lastErr = e;
+        attempts.push(`${base}: ${messageOf(e)}`);
         console.warn(`Failed to load ffmpeg-core from ${base}, trying next CDN if available.`, e);
       }
     }
-    throw lastErr instanceof Error ? lastErr : new Error("Failed to load the video engine from any CDN");
+    // Preserve the real underlying reason (which may be a DOMException, not
+    // an Error instance) rather than replacing it with a generic message.
+    throw new Error(
+      `Failed to load the video engine from any CDN:\n${attempts.join("\n")}`,
+      lastErr instanceof Error ? { cause: lastErr } : undefined
+    );
   };
 
   const onVideoLoaded = () => {

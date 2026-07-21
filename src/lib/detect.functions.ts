@@ -27,7 +27,7 @@ export type DetectResult =
   | { found: false; reason?: string };
 
 export const detectRegion = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => Input.parse(d))
+  .validator((d: unknown) => Input.parse(d))
   .handler(async ({ data }): Promise<DetectResult> => {
     const groq = createGroqProvider();
 

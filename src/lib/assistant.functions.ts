@@ -19,7 +19,7 @@ How the tool works:
 Answer clearly and concisely. Give step-by-step tips when useful (e.g. "select a slightly larger box than the logo", "for moving captions, cover the entire caption band"). If unsure, say so.`;
 
 export const askAssistant = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => Input.parse(d))
+  .validator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
     const groq = createGroqProvider();
     const { text } = await generateText({
