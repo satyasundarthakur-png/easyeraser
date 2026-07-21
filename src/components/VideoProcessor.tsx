@@ -242,10 +242,11 @@ export function VideoProcessor() {
       const outputName = "output.mp4";
       await ffmpeg.writeFile(inputName, await fetchFile(file));
 
-      const vf =
-        mode === "delogo"
-          ? `delogo=x=${rx}:y=${ry}:w=${rw}:h=${rh}:show=0`
-          : `boxblur=luma_radius=min(h\\,w)/40:luma_power=2:enable='between(t,0,999999)'`;
+      const vf = `delogo=x=${rx}:y=${ry}:w=${rw}:h=${rh}:show=0`;
+      // boxblur's radius must scale down for small selections — a fixed
+      // radius of 20 fails on small crops (e.g. a typical small logo box)
+      // because it exceeds what the cropped region/chroma planes support.
+      const blurRadius = Math.max(2, Math.min(20, Math.floor(Math.min(rw, rh) / 6)));
 
       // For blur mode we crop-blur-overlay so only the region is blurred
       const args =
@@ -255,7 +256,7 @@ export function VideoProcessor() {
               "-i",
               inputName,
               "-filter_complex",
-              `[0:v]crop=${rw}:${rh}:${rx}:${ry},boxblur=20:2[fg];[0:v][fg]overlay=${rx}:${ry}[v]`,
+              `[0:v]crop=${rw}:${rh}:${rx}:${ry},boxblur=${blurRadius}:2[fg];[0:v][fg]overlay=${rx}:${ry}[v]`,
               "-map",
               "[v]",
               "-map",
