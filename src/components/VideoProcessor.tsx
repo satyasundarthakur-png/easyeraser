@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { detectRegion } from "../lib/detect.functions";
 
-type Status = "idle" | "loading-engine" | "ready" | "selecting" | "processing" | "done" | "error";
+type Status = "idle" | "loading-engine" | "ready" | "selecting" | "processing" | "done" | "error" | "stopped";
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -129,6 +129,8 @@ export function VideoProcessor() {
   const [rect, setRect] = useState<Rect | null>(null);
   const [videoDims, setVideoDims] = useState<{ w: number; h: number } | null>(null);
   const [mode, setMode] = useState<"delogo" | "blur">("delogo");
+  const [stoppedAt, setStoppedAt] = useState<{ pct: number; seconds: number } | null>(null);
+  const [makingPartial, setMakingPartial] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [detectedLabel, setDetectedLabel] = useState<string | null>(null);
 
@@ -136,6 +138,7 @@ export function VideoProcessor() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const ffmpegRef = useRef<any>(null);
+  const stopRequestedRef = useRef(false);
   const drawStart = useRef<{ x: number; y: number } | null>(null);
 
   const reset = () => {
@@ -327,80 +330,139 @@ export function VideoProcessor() {
     }
   };
 
-  const process = async () => {
-    if (!file || !rect || !videoDims || !overlayRef.current) {
-      setErr({
-        title: "No region selected",
-        message: "Draw a box over the logo, caption, or watermark first.",
-      });
-      return;
-    }
+  // Shared job runner used both for the full run and for regenerating a
+  // short "partial" clip after a stop. trimSeconds, if given, limits output
+  // to that many seconds — used to produce a clean, valid, playable clip
+  // representing roughly how much of the video had been processed when
+  // the user stopped (ffmpeg.wasm's terminate() kills the whole worker and
+  // its in-memory filesystem, so the truly-in-progress bytes can't be
+  // recovered — regenerating a short equivalent clip is the reliable way
+  // to give the user something real to download).
+  const runJob = async (rx: number, ry: number, rw: number, rh: number, trimSeconds?: number) => {
+    const ffmpeg = await ensureEngine();
+    setStatus("processing");
+    setStage("Loading file into memory…");
+    const { fetchFile } = await import("@ffmpeg/util");
+    const inputName = "input" + (file!.name.match(/\.[a-z0-9]+$/i)?.[0] ?? ".mp4");
+    const outputName = "output.mp4";
+    await ffmpeg.writeFile(inputName, await fetchFile(file!));
+
+    const vf = `delogo=x=${rx}:y=${ry}:w=${rw}:h=${rh}:show=0`;
+    const blurRadius = Math.max(2, Math.min(20, Math.floor(Math.min(rw, rh) / 6)));
+    const trimArgs = trimSeconds ? ["-t", trimSeconds.toFixed(2)] : [];
+
+    const args =
+      mode === "delogo"
+        ? ["-i", inputName, ...trimArgs, "-vf", vf, "-c:a", "copy", "-y", outputName]
+        : [
+            "-i",
+            inputName,
+            ...trimArgs,
+            "-filter_complex",
+            `[0:v]crop=${rw}:${rh}:${rx}:${ry},boxblur=${blurRadius}:2[fg];[0:v][fg]overlay=${rx}:${ry}[v]`,
+            "-map",
+            "[v]",
+            "-map",
+            "0:a?",
+            "-c:a",
+            "copy",
+            "-y",
+            outputName,
+          ];
+
+    setStage(trimSeconds ? "Regenerating partial clip…" : "Removing selected region across all frames…");
+    await ffmpeg.exec(args);
+    setStage("Finalizing output…");
+    const data: any = await ffmpeg.readFile(outputName);
+    const blob = new Blob([data.buffer], { type: "video/mp4" });
+    setOutputUrl(URL.createObjectURL(blob));
+    setProgress(100);
+    setStatus("done");
+    setStage("");
+  };
+
+  const getScaledRect = () => {
+    if (!rect || !videoDims || !overlayRef.current) return null;
     const overlayRect = overlayRef.current.getBoundingClientRect();
-    // scale from displayed coords -> real video pixel coords
     const sx = videoDims.w / overlayRect.width;
     const sy = videoDims.h / overlayRect.height;
     let rx = Math.round(rect.x * sx);
     let ry = Math.round(rect.y * sy);
     let rw = Math.round(rect.w * sx);
     let rh = Math.round(rect.h * sy);
-    // delogo requires min 1px inside frame; also constrain
     rx = Math.max(1, Math.min(videoDims.w - 2, rx));
     ry = Math.max(1, Math.min(videoDims.h - 2, ry));
     rw = Math.max(4, Math.min(videoDims.w - rx - 1, rw));
     rh = Math.max(4, Math.min(videoDims.h - ry - 1, rh));
+    return { rx, ry, rw, rh };
+  };
 
+  const process = async () => {
+    const scaled = getScaledRect();
+    if (!file || !scaled) {
+      setErr({
+        title: "No region selected",
+        message: "Draw a box over the logo, caption, or watermark first.",
+      });
+      return;
+    }
     setErr(null);
     setShowErrDetail(false);
     setOutputUrl(null);
     setProgress(0);
+    setStoppedAt(null);
+    stopRequestedRef.current = false;
     setStage("Preparing engine…");
     try {
-      const ffmpeg = await ensureEngine();
-      setStatus("processing");
-      setStage("Loading file into memory…");
-      const { fetchFile } = await import("@ffmpeg/util");
-      const inputName = "input" + (file.name.match(/\.[a-z0-9]+$/i)?.[0] ?? ".mp4");
-      const outputName = "output.mp4";
-      await ffmpeg.writeFile(inputName, await fetchFile(file));
-
-      const vf = `delogo=x=${rx}:y=${ry}:w=${rw}:h=${rh}:show=0`;
-      // boxblur's radius must scale down for small selections — a fixed
-      // radius of 20 fails on small crops (e.g. a typical small logo box)
-      // because it exceeds what the cropped region/chroma planes support.
-      const blurRadius = Math.max(2, Math.min(20, Math.floor(Math.min(rw, rh) / 6)));
-
-      // For blur mode we crop-blur-overlay so only the region is blurred
-      const args =
-        mode === "delogo"
-          ? ["-i", inputName, "-vf", vf, "-c:a", "copy", "-y", outputName]
-          : [
-              "-i",
-              inputName,
-              "-filter_complex",
-              `[0:v]crop=${rw}:${rh}:${rx}:${ry},boxblur=${blurRadius}:2[fg];[0:v][fg]overlay=${rx}:${ry}[v]`,
-              "-map",
-              "[v]",
-              "-map",
-              "0:a?",
-              "-c:a",
-              "copy",
-              "-y",
-              outputName,
-            ];
-
-      setStage("Removing selected region across all frames…");
-      await ffmpeg.exec(args);
-      setStage("Finalizing output…");
-      const data: any = await ffmpeg.readFile(outputName);
-      const blob = new Blob([data.buffer], { type: "video/mp4" });
-      setOutputUrl(URL.createObjectURL(blob));
-      setProgress(100);
-      setStatus("done");
-      setStage("");
+      await runJob(scaled.rx, scaled.ry, scaled.rw, scaled.rh);
     } catch (e: any) {
+      if (stopRequestedRef.current) {
+        // Intentional user stop — handled by stopProcessing(), not an error.
+        stopRequestedRef.current = false;
+        return;
+      }
       console.error(e);
       setErr(explainError(e, stage));
       setStatus("error");
+    }
+  };
+
+  // Stops the current job immediately. ffmpeg.wasm has no graceful
+  // cancel — terminate() kills the worker outright — so we capture how
+  // far we'd gotten (from the last known progress %) before doing so, to
+  // offer a regenerated partial clip afterward.
+  const stopProcessing = () => {
+    if (status !== "processing" || !ffmpegRef.current) return;
+    const totalDuration = videoRef.current?.duration;
+    const pct = progress;
+    stopRequestedRef.current = true;
+    try {
+      ffmpegRef.current.terminate();
+    } catch {
+      /* already dead */
+    }
+    ffmpegRef.current = null; // worker is gone; ensureEngine() must recreate it
+    const seconds =
+      totalDuration && isFinite(totalDuration) && pct > 0 ? Math.max(0.5, (pct / 100) * totalDuration) : undefined;
+    setStatus("stopped");
+    setStage("");
+    setStoppedAt({ pct, seconds: seconds ?? 0 });
+  };
+
+  const downloadPartial = async () => {
+    const scaled = getScaledRect();
+    if (!file || !scaled || !stoppedAt) return;
+    setMakingPartial(true);
+    setErr(null);
+    setShowErrDetail(false);
+    try {
+      await runJob(scaled.rx, scaled.ry, scaled.rw, scaled.rh, stoppedAt.seconds || 1);
+    } catch (e: any) {
+      console.error(e);
+      setErr(explainError(e, "Regenerating partial clip…"));
+      setStatus("error");
+    } finally {
+      setMakingPartial(false);
     }
   };
 
@@ -577,13 +639,56 @@ export function VideoProcessor() {
 
           {(status === "processing" || status === "loading-engine") && (
             <div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="bg-rainbow-flow h-full transition-[width]"
-                  style={{ width: `${progress}%` }}
-                />
+              <div className="flex items-center gap-3">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="bg-rainbow-flow h-full transition-[width]"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                {status === "processing" && (
+                  <button
+                    type="button"
+                    onClick={stopProcessing}
+                    className="shrink-0 rounded-md border border-destructive/40 px-3 py-1 text-xs font-medium text-destructive hover:bg-destructive/10"
+                  >
+                    Stop
+                  </button>
+                )}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{stage} {progress > 0 ? `· ${progress}%` : ""}</p>
+            </div>
+          )}
+
+          {status === "stopped" && stoppedAt && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">
+                Stopped at {stoppedAt.pct}%{stoppedAt.seconds > 0 ? ` (~${stoppedAt.seconds.toFixed(1)}s of ${videoRef.current?.duration?.toFixed(1) ?? "?"}s)` : ""}
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {stoppedAt.seconds > 0
+                  ? "The engine can't hand back exactly what it had processed, but it can quickly regenerate a clean clip covering roughly that much of the video if you'd like to keep it."
+                  : "Nothing was processed yet, so there's no partial clip to offer — just start again when ready."}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {stoppedAt.seconds > 0 && (
+                  <button
+                    type="button"
+                    onClick={downloadPartial}
+                    disabled={makingPartial}
+                    className="bg-rainbow-flow rounded-md px-4 py-2 text-xs font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.35)] disabled:opacity-60"
+                  >
+                    {makingPartial ? "Regenerating…" : `Get partial clip (~${stoppedAt.seconds.toFixed(1)}s)`}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={process}
+                  className="rounded-md border border-border px-4 py-2 text-xs font-medium hover:bg-accent/40"
+                >
+                  Start over from the beginning
+                </button>
+              </div>
             </div>
           )}
 
@@ -613,6 +718,7 @@ export function VideoProcessor() {
             </div>
           )}
 
+          {status !== "stopped" && (
           <div className="flex flex-wrap gap-3">
             <button
               onClick={process}
@@ -637,6 +743,7 @@ export function VideoProcessor() {
               </a>
             )}
           </div>
+          )}
         </div>
       )}
     </div>
