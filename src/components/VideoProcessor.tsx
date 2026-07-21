@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { detectRegion } from "../lib/detect.functions";
 
 type Status = "idle" | "loading-engine" | "ready" | "selecting" | "processing" | "done" | "error";
 
@@ -42,9 +43,11 @@ function explainError(raw: unknown, stage?: string): AppError {
   }
   if (text.includes("failed to fetch") || text.includes("networkerror") || text.includes("load failed")) {
     return {
-      title: "Couldn't load the processing engine",
+      title: stage === "Auto-detecting overlay…" ? "Couldn't reach the AI detector" : "Couldn't load the processing engine",
       message:
-        "The video engine files couldn't be downloaded, likely due to a network issue or an ad-blocker. Check your connection and try again.",
+        stage === "Auto-detecting overlay…"
+          ? "The AI detection request failed, likely due to a network issue. You can draw the box manually instead."
+          : "The video engine files couldn't be downloaded, likely due to a network issue or an ad-blocker. Check your connection and try again.",
       stage,
       detail,
     };
@@ -97,6 +100,8 @@ export function VideoProcessor() {
   const [rect, setRect] = useState<Rect | null>(null);
   const [videoDims, setVideoDims] = useState<{ w: number; h: number } | null>(null);
   const [mode, setMode] = useState<"delogo" | "blur">("delogo");
+  const [detecting, setDetecting] = useState(false);
+  const [detectedLabel, setDetectedLabel] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -117,6 +122,7 @@ export function VideoProcessor() {
     setShowErrDetail(false);
     setRect(null);
     setVideoDims(null);
+    setDetectedLabel(null);
   };
 
   const accept = useCallback((f: File) => {
@@ -126,6 +132,7 @@ export function VideoProcessor() {
     setOutputUrl(null);
     setProgress(0);
     setRect(null);
+    setDetectedLabel(null);
     setStatus("selecting");
     setFile(f);
     setInputUrl(URL.createObjectURL(f));
@@ -188,6 +195,7 @@ export function VideoProcessor() {
     const r = el.getBoundingClientRect();
     drawStart.current = { x: e.clientX - r.left, y: e.clientY - r.top };
     setRect({ x: drawStart.current.x, y: drawStart.current.y, w: 0, h: 0 });
+    setDetectedLabel(null);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drawStart.current) return;
@@ -204,6 +212,59 @@ export function VideoProcessor() {
   };
   const onPointerUp = () => {
     drawStart.current = null;
+  };
+
+  // Captures the current video frame, sends it to the AI detector, and
+  // pre-fills the same draggable/resizable selection box the user would
+  // draw manually — so the AI's guess is always a starting point the user
+  // can edit, never a black box.
+  const autoDetect = async () => {
+    const v = videoRef.current;
+    const overlayEl = overlayRef.current;
+    if (!v || !overlayEl || !videoDims) return;
+
+    setDetecting(true);
+    setErr(null);
+    setShowErrDetail(false);
+    setStage("Auto-detecting overlay…");
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = videoDims.w;
+      canvas.height = videoDims.h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas not supported in this browser");
+      ctx.drawImage(v, 0, 0, videoDims.w, videoDims.h);
+      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+
+      const result = await detectRegion({ data: { imageDataUrl } });
+
+      if (!result.found) {
+        setErr({
+          title: "No overlay found",
+          message:
+            "The AI didn't find an obvious logo, watermark, or caption to remove. Try a frame where the mark is clearly visible, or draw the box manually.",
+          stage: "Auto-detecting overlay…",
+        });
+        return;
+      }
+
+      // Convert the AI's normalized (0..1) box into the same displayed
+      // pixel coordinates the manual drag-box uses.
+      const overlayRect = overlayEl.getBoundingClientRect();
+      setRect({
+        x: result.x * overlayRect.width,
+        y: result.y * overlayRect.height,
+        w: result.w * overlayRect.width,
+        h: result.h * overlayRect.height,
+      });
+      setDetectedLabel(result.label);
+    } catch (e: any) {
+      console.error(e);
+      setErr(explainError(e, "Auto-detecting overlay…"));
+    } finally {
+      setDetecting(false);
+      setStage("");
+    }
   };
 
   const process = async () => {
@@ -359,9 +420,26 @@ export function VideoProcessor() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                1. Draw a box over the logo / caption / watermark
-              </p>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  1. Draw a box over the logo / caption / watermark
+                </p>
+                <button
+                  type="button"
+                  onClick={autoDetect}
+                  disabled={detecting || !videoDims || status === "processing" || status === "loading-engine"}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
+                >
+                  {detecting ? (
+                    "Detecting…"
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v2m0 14v2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M3 12h2m14 0h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>
+                      Auto-detect (AI)
+                    </>
+                  )}
+                </button>
+              </div>
               <div className="relative overflow-hidden rounded-lg border border-border bg-black">
                 {inputUrl && (
                   <video
@@ -394,7 +472,9 @@ export function VideoProcessor() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Tip: pause the video on a frame where the mark is clearly visible, then click-drag over it.
+                {detectedLabel
+                  ? `AI suggested a "${detectedLabel}" region — drag a new box over the video to adjust it.`
+                  : "Tip: pause the video on a frame where the mark is clearly visible, then click-drag over it, or use Auto-detect (AI)."}
               </p>
             </div>
             <div>
