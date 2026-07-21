@@ -1,9 +1,10 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { askAssistant } from "@/lib/assistant.functions";
 import veoDemo from "@/assets/veo-demo.gif.asset.json";
 import gwtDemo from "@/assets/gwt-demo.gif.asset.json";
+import { VideoProcessor } from "@/components/VideoProcessor";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -110,6 +111,16 @@ function Home() {
               Before / after
             </figcaption>
           </figure>
+        </div>
+
+        <div className="mt-16">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold tracking-tight">Try it in your browser</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Upload an mp4, webm, mov, mkv, or wav file — or run the built-in sample — to preview the pipeline and download the result.
+            </p>
+          </div>
+          <VideoProcessor />
         </div>
       </section>
 
