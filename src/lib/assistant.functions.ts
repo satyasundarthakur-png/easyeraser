@@ -1,32 +1,35 @@
 import { createServerFn } from "@tanstack/react-start";
 import { generateText } from "ai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
-import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 
 const Input = z.object({
   question: z.string().min(1).max(2000),
 });
 
-const SYSTEM = `You are an expert assistant for "Veo Watermark Remover" — an open-source CLI tool that removes the Gemini/Veo diamond watermark and the small "Veo" text wordmark from Google Veo-generated videos using mathematically precise reverse alpha blending (no generative fill, no hallucinated pixels).
+const SYSTEM = `You are a helpful assistant for a browser-based video cleanup tool that removes logos, captions, subtitles, and watermarks from user-uploaded videos.
 
-Key facts:
-- Runs fully offline. No cloud. Cross-platform single executable (Windows / Linux / macOS).
-- Auto-detects the watermark (Gemini diamond OR small Veo text), landscape or portrait, 720p and 1080p.
-- Preserves audio without re-encoding.
-- Flags: --legacy (older large Veo text pre-Gemini-3.5), --ml (opt-in Alpha Judge intensity assist), --variant 720p-1/720p-2, --sigma N, -i/-o.
-- Latest release v0.6.4: ML assist is opt-in; more reliable small "Veo" detection; adds 1080p small Veo wordmark.
-- Manual touch-up workflow uses ffmpeg to decompose frames and the GUI GeminiWatermarkTool Alpha slider.
+How the tool works:
+- Runs 100% in the browser — no upload, no cloud, private by default.
+- The user drags a rectangle over the logo / caption / watermark region on the first frame.
+- The tool applies a de-logo / inpainting filter across every frame at full resolution.
+- Original audio is preserved without re-encoding when possible.
+- Supported inputs: mp4, webm, mov, mkv, wav.
 
-Answer clearly, concisely, with code examples when useful. If unsure, say so.`;
+Answer clearly and concisely. Give step-by-step tips when useful (e.g. "select a slightly larger box than the logo", "for moving captions, cover the entire caption band"). If unsure, say so.`;
 
 export const askAssistant = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("Missing LOVABLE_API_KEY");
-    const gateway = createLovableAiGatewayProvider(key);
+    const key = process.env.GROQ_API_KEY;
+    if (!key) throw new Error("Missing GROQ_API_KEY");
+    const groq = createOpenAICompatible({
+      name: "groq",
+      baseURL: "https://api.groq.com/openai/v1",
+      headers: { Authorization: `Bearer ${key}` },
+    });
     const { text } = await generateText({
-      model: gateway("google/gemini-3-flash-preview"),
+      model: groq("llama-3.3-70b-versatile"),
       system: SYSTEM,
       prompt: data.question,
     });
